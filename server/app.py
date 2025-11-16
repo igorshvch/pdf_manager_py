@@ -92,32 +92,15 @@ def slice_document(doc_id: str):
     return {"document": meta.as_dict()}
 
 
-@app.post("/api/merge")
-def merge_documents():
-    """Merge multiple documents into a new PDF."""
+@app.delete("/api/document/<doc_id>")
+def delete_document(doc_id: str):
+    """Remove a document from storage."""
 
-    payload: Dict[str, Any] = request.get_json(force=True)
-    doc_ids = payload.get("documentIds", [])
-    output_name = payload.get("name")
     try:
-        meta = service.merge_documents(doc_ids, output_name)
-    except (KeyError, ValueError) as exc:
-        return _json_error(str(exc))
-    return {"document": meta.as_dict()}
-
-
-@app.post("/api/document/<doc_id>/rotate")
-def rotate_document(doc_id: str):
-    """Rotate a subset of pages by the provided angle."""
-
-    payload: Dict[str, Any] = request.get_json(force=True)
-    pages = payload.get("pages", [])
-    angle = int(payload.get("angle", 90))
-    try:
-        meta = service.rotate_pages(doc_id, pages, angle)
-    except (KeyError, ValueError) as exc:
-        return _json_error(str(exc))
-    return {"document": meta.as_dict()}
+        service.delete_document(doc_id)
+    except KeyError as exc:
+        return _json_error(str(exc), status=404)
+    return {"status": "deleted", "doc_id": doc_id}
 
 
 if __name__ == "__main__":

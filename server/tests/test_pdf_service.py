@@ -43,3 +43,15 @@ def test_slice_by_explicit_pages(tmp_path):
 
     assert result.pages == 3
     assert _page_widths(storage / f"{result.doc_id}.pdf") == [210, 230, 240]
+
+
+def test_delete_document_removes_file(tmp_path):
+    storage = tmp_path / "storage"
+    storage.mkdir()
+    _make_source_pdf(storage)
+    service = PdfService(storage)
+
+    service.delete_document("sample")
+
+    assert not (storage / "sample.pdf").exists()
+    assert service.list_documents() == []

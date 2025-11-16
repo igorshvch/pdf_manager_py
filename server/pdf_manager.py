@@ -95,6 +95,14 @@ class PdfService:
         except KeyError as exc:
             raise KeyError(f"Document {doc_id} not found") from exc
 
+    def delete_document(self, doc_id: str) -> None:
+        """Remove a document from storage and forget its metadata."""
+
+        meta = self.get_document(doc_id)
+        if meta.path.exists():
+            meta.path.unlink()
+        del self._documents[doc_id]
+
     def get_page_previews(self, doc_id: str) -> List[Dict[str, str | int]]:
         """Return base64 previews for each page in the document."""
 
@@ -167,33 +175,4 @@ class PdfService:
                 raise ValueError(f"Page {page} is out of bounds for document with {max_pages} pages")
         return normalized
 
-    def merge_documents(self, doc_ids: Iterable[str], output_name: str | None = None) -> DocumentMeta:
-        """Merge the provided documents into a new PDF."""
-
-        writer = PdfWriter()
-        seen = False
-        for doc_id in doc_ids:
-            meta = self.get_document(doc_id)
-            seen = True
-            reader = PdfReader(meta.path)
-            for page in reader.pages:
-                writer.add_page(page)
-        if not seen:
-            raise ValueError("No documents provided for merging")
-        return self._store_writer(writer, filename=output_name)
-
-    def rotate_pages(self, doc_id: str, pages: Iterable[int], angle: int) -> DocumentMeta:
-        """Rotate selected pages and persist changes as a new PDF."""
-
-        meta = self.get_document(doc_id)
-        page_set = {page for page in pages}
-        if not page_set:
-            raise ValueError("No pages supplied for rotation")
-        reader = PdfReader(meta.path)
-        writer = PdfWriter()
-        for index, page in enumerate(reader.pages, start=1):
-            if index in page_set:
-                page.rotate(angle)
-            writer.add_page(page)
-        return self._store_writer(writer)
 

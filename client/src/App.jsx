@@ -1,36 +1,31 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  fetchDocuments,
-  uploadDocument,
-  fetchPages,
-  sliceDocument,
-  mergeDocuments,
-  rotatePages,
-} from './api.js';
+import { fetchDocuments, uploadDocument, fetchPages, sliceDocument, deleteDocument } from './api.js';
 import { DocumentList, DropZone, PagePreviewGrid } from './components/index.js';
 
 const App = () => {
   const [documents, setDocuments] = useState([]);
-  const [selectedDocument, setSelectedDocument] = useState(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState(null);
   const [pages, setPages] = useState([]);
-  const [pageOrder, setPageOrder] = useState([]);
   const [selectedPages, setSelectedPages] = useState(new Set());
-  const [mergeSelection, setMergeSelection] = useState(new Set());
   const [sliceRange, setSliceRange] = useState({ start: 1, end: 1 });
-  const [rotateAngle, setRotateAngle] = useState(90);
   const [statusMessage, setStatusMessage] = useState('');
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [loadingPages, setLoadingPages] = useState(false);
 
-  const orderedPages = useMemo(() => {
-    if (!pageOrder.length) return pages;
-    return pageOrder.map((index) => pages[index]).filter(Boolean);
-  }, [pageOrder, pages]);
+  const activeDocument = useMemo(
+    () => documents.find((doc) => doc.doc_id === selectedDocumentId) || null,
+    [documents, selectedDocumentId],
+  );
 
   const loadDocuments = useCallback(async () => {
+    setLoadingDocuments(true);
     try {
       const { documents: serverDocuments } = await fetchDocuments();
       setDocuments(serverDocuments);
     } catch (error) {
       setStatusMessage(error.message);
+    } finally {
+      setLoadingDocuments(false);
     }
   }, []);
 
@@ -51,27 +46,69 @@ const App = () => {
   };
 
   const handleSelectDocument = async (docId) => {
-    setSelectedDocument(docId);
+    if (docId === selectedDocumentId) return;
+    setSelectedDocumentId(docId);
     setSelectedPages(new Set());
+    setPages([]);
+    setSliceRange({ start: 1, end: 1 });
+    setLoadingPages(true);
     try {
       const { pages: pagePreviews } = await fetchPages(docId);
       setPages(pagePreviews);
-      setPageOrder(pagePreviews.map((_, idx) => idx));
-      setSliceRange({ start: 1, end: pagePreviews.length });
+      const totalPages = pagePreviews.length || 1;
+      setSliceRange({ start: 1, end: totalPages });
+    } catch (error) {
+      setStatusMessage(error.message);
+    } finally {
+      setLoadingPages(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    try {
+      await deleteDocument(docId);
+      setStatusMessage('Document deleted');
+      if (docId === selectedDocumentId) {
+        setSelectedDocumentId(null);
+        setPages([]);
+        setSelectedPages(new Set());
+      }
+      loadDocuments();
     } catch (error) {
       setStatusMessage(error.message);
     }
   };
 
+  const togglePageSelection = (pageNumber) => {
+    setSelectedPages((prev) => {
+      const next = new Set(prev);
+      if (next.has(pageNumber)) {
+        next.delete(pageNumber);
+      } else {
+        next.add(pageNumber);
+      }
+      return next;
+    });
+  };
+
   const handleSlice = async () => {
-    if (!selectedDocument) return;
+    if (!selectedDocumentId) return;
     const explicitPages = Array.from(selectedPages).sort((a, b) => a - b);
+    const rangeIsValid =
+      pages.length > 0 &&
+      sliceRange.start >= 1 &&
+      sliceRange.end >= sliceRange.start &&
+      sliceRange.end <= pages.length;
+    if (!explicitPages.length && !rangeIsValid) {
+      setStatusMessage('Select pages or enter a valid range.');
+      return;
+    }
     try {
-      await sliceDocument(selectedDocument, sliceRange.start, sliceRange.end, explicitPages);
+      await sliceDocument(selectedDocumentId, sliceRange.start, sliceRange.end, explicitPages);
       setStatusMessage(
         explicitPages.length
-          ? `Created a new document with ${explicitPages.length} selected page(s)`
-          : `Created a new document from pages ${sliceRange.start}-${sliceRange.end}`,
+          ? `Created a copy with ${explicitPages.length} page${explicitPages.length > 1 ? 's' : ''}.`
+          : `Created a copy for pages ${sliceRange.start}-${sliceRange.end}.`,
       );
       setSelectedPages(new Set());
       loadDocuments();
@@ -80,67 +117,41 @@ const App = () => {
     }
   };
 
-  const handleRotate = async () => {
-    if (!selectedDocument || !selectedPages.size) return;
-    try {
-      await rotatePages(selectedDocument, Array.from(selectedPages), rotateAngle);
-      setStatusMessage('Rotation complete');
-      loadDocuments();
-    } catch (error) {
-      setStatusMessage(error.message);
-    }
+  const clampRangeValue = (value) => {
+    if (!pages.length) return 1;
+    const maxPage = pages.length;
+    return Math.min(Math.max(value, 1), maxPage);
   };
 
-  const handleMerge = async () => {
-    const ids = Array.from(mergeSelection);
-    if (!ids.length) return;
-    try {
-      await mergeDocuments(ids, `merged-${Date.now()}.pdf`);
-      setStatusMessage('Merged documents');
-      loadDocuments();
-    } catch (error) {
-      setStatusMessage(error.message);
-    }
-  };
-
-  const togglePageSelection = (pageIndex) => {
-    setSelectedPages((prev) => {
-      const next = new Set(prev);
-      if (next.has(pageIndex)) {
-        next.delete(pageIndex);
-      } else {
-        next.add(pageIndex);
-      }
-      return next;
+  const handleStartChange = (event) => {
+    const value = Number(event.target.value);
+    if (Number.isNaN(value)) return;
+    setSliceRange((prev) => {
+      const safeStart = clampRangeValue(value);
+      const safeEnd = Math.max(safeStart, clampRangeValue(prev.end));
+      return { start: safeStart, end: safeEnd };
     });
   };
 
-  const reorderPages = (fromIndex, toIndex) => {
-    setPageOrder((prev) => {
-      const copy = [...prev];
-      const [moved] = copy.splice(fromIndex, 1);
-      copy.splice(toIndex, 0, moved);
-      return copy;
+  const handleEndChange = (event) => {
+    const value = Number(event.target.value);
+    if (Number.isNaN(value)) return;
+    setSliceRange((prev) => {
+      const safeEnd = clampRangeValue(value);
+      return { start: Math.min(prev.start, safeEnd), end: Math.max(prev.start, safeEnd) };
     });
   };
 
-  const toggleMergeSelection = (docId) => {
-    setMergeSelection((prev) => {
-      const next = new Set(prev);
-      if (next.has(docId)) {
-        next.delete(docId);
-      } else {
-        next.add(docId);
-      }
-      return next;
-    });
-  };
+  const canSlice =
+    Boolean(selectedDocumentId) &&
+    (selectedPages.size > 0 ||
+      (pages.length > 0 && sliceRange.start >= 1 && sliceRange.end <= pages.length && sliceRange.start <= sliceRange.end));
 
   return (
     <main>
       <header>
         <h1>PDF Manager</h1>
-        <p>Upload, slice, merge, rotate, and preview pages with drag & drop interactions.</p>
+        <p>Upload a PDF, select it, and cut the pages you need.</p>
       </header>
 
       {statusMessage && <div className="status">{statusMessage}</div>}
@@ -151,77 +162,65 @@ const App = () => {
         <DocumentList
           documents={documents}
           onSelect={handleSelectDocument}
-          activeId={selectedDocument}
-          mergeSelection={mergeSelection}
-          onMergeToggle={toggleMergeSelection}
+          activeId={selectedDocumentId}
+          onDelete={handleDeleteDocument}
+          loading={loadingDocuments}
         />
 
         <div className="workspace">
-          <div className="controls">
-            <div className="slice-controls">
-              <h3>Slice</h3>
-              <label>
-                Start page
-                <input
-                  type="number"
-                  min="1"
-                  max={pages.length || undefined}
-                  value={sliceRange.start}
-                  onChange={(event) => {
-                    const nextStart = Number(event.target.value);
-                    setSliceRange((prev) => ({ start: nextStart, end: Math.max(nextStart, prev.end) }));
-                  }}
-                />
-              </label>
-              <label>
-                End page
-                <input
-                  type="number"
-                  min={sliceRange.start}
-                  max={pages.length || undefined}
-                  value={sliceRange.end}
-                  onChange={(event) =>
-                    setSliceRange((prev) => ({ ...prev, end: Number(event.target.value) }))
-                  }
-                />
-              </label>
-              <p className="hint">
-                Select individual pages in the preview grid to slice just those pages. Otherwise the range above is used.
-              </p>
-              <button type="button" onClick={handleSlice} disabled={!selectedDocument}>
-                Slice to new document
+          <section className="controls">
+            <div>
+              <h2>Slice selected document</h2>
+              {activeDocument ? (
+                <p className="hint">
+                  Working with <strong>{activeDocument.name}</strong> ({activeDocument.pages} pages)
+                </p>
+              ) : (
+                <p className="hint">Select a document from the list to enable slicing tools.</p>
+              )}
+
+              <div className="range-inputs">
+                <label>
+                  Start page
+                  <input
+                    type="number"
+                    min="1"
+                    max={pages.length || 1}
+                    value={sliceRange.start}
+                    onChange={handleStartChange}
+                    disabled={!activeDocument}
+                  />
+                </label>
+                <label>
+                  End page
+                  <input
+                    type="number"
+                    min={sliceRange.start}
+                    max={pages.length || 1}
+                    value={sliceRange.end}
+                    onChange={handleEndChange}
+                    disabled={!activeDocument}
+                  />
+                </label>
+              </div>
+
+              <p className="hint">Click thumbnails below to pick specific pages. Leave unselected to use the range.</p>
+
+              <button type="button" onClick={handleSlice} disabled={!canSlice}>
+                Slice pages to new document
               </button>
             </div>
+          </section>
 
-            <div className="rotate-controls">
-              <h3>Rotate Selected Pages</h3>
-              <label>
-                Angle
-                <select value={rotateAngle} onChange={(event) => setRotateAngle(Number(event.target.value))}>
-                  <option value={90}>90°</option>
-                  <option value={180}>180°</option>
-                  <option value={270}>270°</option>
-                </select>
-              </label>
-              <button type="button" onClick={handleRotate} disabled={!selectedPages.size}>
-                Rotate pages
-              </button>
-            </div>
-
-            <div className="merge-controls">
-              <h3>Merge</h3>
-              <button type="button" onClick={handleMerge} disabled={!mergeSelection.size}>
-                Merge selected documents
-              </button>
-            </div>
-          </div>
-
-          <PagePreviewGrid
-            pages={orderedPages}
-            onReorder={reorderPages}
-            onToggleSelect={togglePageSelection}
-            selectedPages={selectedPages}
-          />
+          <section className="preview-panel">
+            <h2>Page previews</h2>
+            <PagePreviewGrid
+              pages={pages}
+              selectedPages={selectedPages}
+              onToggleSelect={togglePageSelection}
+              isLoading={loadingPages}
+            />
+          </section>
         </div>
       </section>
     </main>

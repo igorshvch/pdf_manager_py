@@ -1,33 +1,26 @@
-import React, { useState } from 'react';
+import React from 'react';
 
-const PagePreviewGrid = ({ pages, onReorder, onToggleSelect, selectedPages }) => {
-  const [dragging, setDragging] = useState(null);
+const PagePreviewGrid = ({ pages, onToggleSelect, selectedPages, isLoading }) => {
+  if (isLoading) {
+    return <div className="page-grid page-grid--empty">Loading previews…</div>;
+  }
 
-  const handleDragStart = (pageIndex) => {
-    setDragging(pageIndex);
-  };
-
-  const handleDrop = (targetIndex) => {
-    if (dragging === null) return;
-    onReorder(dragging, targetIndex);
-    setDragging(null);
-  };
+  if (!pages.length) {
+    return <div className="page-grid page-grid--empty">Select a document to view its pages.</div>;
+  }
 
   return (
     <div className="page-grid">
-      {pages.map((page, idx) => (
-        <div
+      {pages.map((page) => (
+        <button
+          type="button"
           key={page.index}
           className={`page-preview ${selectedPages.has(page.index) ? 'page-preview--selected' : ''}`}
-          draggable
-          onDragStart={() => handleDragStart(idx)}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={() => handleDrop(idx)}
           onClick={() => onToggleSelect(page.index)}
         >
           <img src={page.preview} alt={`Page ${page.index}`} />
           <span>Page {page.index}</span>
-        </div>
+        </button>
       ))}
     </div>
   );

@@ -1,6 +1,6 @@
 # PDF Manager
 
-A client-server application for uploading, slicing, merging, rotating, and previewing PDF files. The backend is powered by Flask with PyPDF2 for structural manipulation and pypdfium2 (PDFium) for preview rendering, while the frontend is a React + Vite dashboard that offers drag-and-drop uploads and page visualization controls.
+A focused client-server application for uploading PDFs, selecting a stored document, previewing its pages, and slicing out exactly the pages you need. The backend is powered by Flask with PyPDF2 for structural manipulation and pypdfium2 (PDFium) for preview rendering, while the frontend is a React + Vite dashboard that offers drag-and-drop uploads and page visualization controls.
 
 ## Repository layout
 
@@ -36,8 +36,7 @@ Key endpoints:
 | `GET` | `/api/documents` | List stored documents. |
 | `GET` | `/api/document/<id>/pages` | Retrieve base64 previews for every page. |
 | `POST` | `/api/document/<id>/slice` | Create a new PDF from a page range or an explicit list of page numbers. |
-| `POST` | `/api/document/<id>/rotate` | Rotate selected pages by 90/180/270 degrees. |
-| `POST` | `/api/merge` | Merge multiple documents into one file. |
+| `DELETE` | `/api/document/<id>` | Remove a stored document and its file from disk. |
 | `GET` | `/api/document/<id>/download` | Download the full PDF. |
 
 All generated PDFs are stored in `server/storage/`.
@@ -59,12 +58,18 @@ All generated PDFs are stored in `server/storage/`.
 Features:
 
 - Drag-and-drop file uploads with automatic validation for PDF MIME types.
-- Document list with merge checkboxes and download links.
-- Full-page previews with selectable cards for rotation.
-- Click-to-select + drag-to-reorder grid for organizing page workflows.
-- Controls for slicing selected pages (via the preview grid) or traditional page ranges, plus rotation tools.
+- Selectable document list with download + delete affordances.
+- Full-page previews rendered via PDFium so you can visually choose pages.
+- Controls for slicing either a contiguous page range or explicitly selected thumbnails; each slice is saved as a brand new PDF in storage.
 
 ## Tests
 
-Manual tests can be performed by running the Flask server and React dev server simultaneously, uploading sample PDFs, and verifying the resulting files in `server/storage/`.
+Automated coverage lives in `server/tests/`. Run it with:
+
+```bash
+cd server
+pytest tests/test_pdf_service.py
+```
+
+For manual testing, run the Flask server and React dev server simultaneously, upload a sample PDF, select it from the sidebar, choose pages, and confirm the new file appears in `server/storage/`.
 

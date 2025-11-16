@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
+export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
 
 async function handleResponse(response) {
   if (!response.ok) {
@@ -37,20 +37,9 @@ export async function sliceDocument(docId, startPage, endPage, pages = []) {
   return handleResponse(response);
 }
 
-export async function rotatePages(docId, pages, angle) {
-  const response = await fetch(`${API_BASE}/api/document/${docId}/rotate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pages, angle }),
-  });
-  return handleResponse(response);
-}
-
-export async function mergeDocuments(documentIds, name) {
-  const response = await fetch(`${API_BASE}/api/merge`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ documentIds, name }),
+export async function deleteDocument(docId) {
+  const response = await fetch(`${API_BASE}/api/document/${docId}`, {
+    method: 'DELETE',
   });
   return handleResponse(response);
 }

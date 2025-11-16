@@ -51,7 +51,7 @@ header {
 }
 
 .document-list {
-  width: 260px;
+  width: 280px;
   background: white;
   border-radius: 8px;
   padding: 1rem;
@@ -63,28 +63,50 @@ header {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .document-list li {
-  margin-bottom: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 0.5rem;
+  border: 2px solid transparent;
 }
 
-.document-list li.active button {
-  font-weight: 600;
+.document-list li.active {
+  border-color: #0ea5e9;
 }
 
-.document-list button {
+.document-list__select {
   background: none;
   border: none;
   text-align: left;
+  width: 100%;
   cursor: pointer;
-  font-size: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 
-.document-list a {
+.document-list__name {
+  font-weight: 600;
+}
+
+.document-list__meta {
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.document-list__actions {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.document-list__actions a {
   color: #0ea5e9;
   text-decoration: none;
 }
@@ -96,17 +118,17 @@ header {
   gap: 1rem;
 }
 
-.controls {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-}
-
-.controls div {
+.controls,
+.preview-panel {
   background: white;
-  padding: 1rem;
+  padding: 1.25rem;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.range-inputs {
+  display: flex;
+  gap: 1rem;
 }
 
 .page-grid {
@@ -115,12 +137,20 @@ header {
   gap: 0.75rem;
 }
 
+.page-grid--empty {
+  padding: 1rem;
+  text-align: center;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
 .page-preview {
   background: white;
   border: 2px solid transparent;
   border-radius: 8px;
   padding: 0.5rem;
-  cursor: grab;
+  cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -151,6 +181,10 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.button--danger {
+  background-color: #dc2626;
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -168,4 +202,8 @@ select {
   font-size: 0.85rem;
   color: #64748b;
   margin: 0.25rem 0 0.5rem;
+}
+
+.empty-state {
+  color: #94a3b8;
 }
