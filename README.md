@@ -21,7 +21,7 @@ Each directory contains its own `AGENTS.md` with contributor-specific guidance.
    cd server
    pip install -r requirements.txt
    ```
-   *Why not PyMuPDF?* The preview renderer now uses `pypdfium2`, which ships ready-made wheels (including for Python 3.13 and Windows) so contributors do not need a local MuPDF build chain.
+   *Why not PyMuPDF?* The preview renderer now uses `pypdfium2`, which ships ready-made wheels (including for Python 3.13 and Windows) so contributors do not need a local MuPDF build chain. The image encoder is `Pillow 11.x`, which also includes Python 3.13 wheels so Windows contributors do not have to build it from source.
 3. Run the server:
    ```bash
    flask --app app run --debug
