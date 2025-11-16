@@ -28,11 +28,11 @@ export async function fetchPages(docId) {
   return handleResponse(response);
 }
 
-export async function sliceDocument(docId, startPage, endPage) {
+export async function sliceDocument(docId, startPage, endPage, pages = []) {
   const response = await fetch(`${API_BASE}/api/document/${docId}/slice`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ startPage, endPage }),
+    body: JSON.stringify({ startPage, endPage, pages }),
   });
   return handleResponse(response);
 }

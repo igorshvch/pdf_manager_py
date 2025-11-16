@@ -65,9 +65,15 @@ const App = () => {
 
   const handleSlice = async () => {
     if (!selectedDocument) return;
+    const explicitPages = Array.from(selectedPages).sort((a, b) => a - b);
     try {
-      await sliceDocument(selectedDocument, sliceRange.start, sliceRange.end);
-      setStatusMessage('Document sliced into a new file');
+      await sliceDocument(selectedDocument, sliceRange.start, sliceRange.end, explicitPages);
+      setStatusMessage(
+        explicitPages.length
+          ? `Created a new document with ${explicitPages.length} selected page(s)`
+          : `Created a new document from pages ${sliceRange.start}-${sliceRange.end}`,
+      );
+      setSelectedPages(new Set());
       loadDocuments();
     } catch (error) {
       setStatusMessage(error.message);
@@ -159,10 +165,12 @@ const App = () => {
                 <input
                   type="number"
                   min="1"
+                  max={pages.length || undefined}
                   value={sliceRange.start}
-                  onChange={(event) =>
-                    setSliceRange((prev) => ({ ...prev, start: Number(event.target.value) }))
-                  }
+                  onChange={(event) => {
+                    const nextStart = Number(event.target.value);
+                    setSliceRange((prev) => ({ start: nextStart, end: Math.max(nextStart, prev.end) }));
+                  }}
                 />
               </label>
               <label>
@@ -170,12 +178,16 @@ const App = () => {
                 <input
                   type="number"
                   min={sliceRange.start}
+                  max={pages.length || undefined}
                   value={sliceRange.end}
                   onChange={(event) =>
                     setSliceRange((prev) => ({ ...prev, end: Number(event.target.value) }))
                   }
                 />
               </label>
+              <p className="hint">
+                Select individual pages in the preview grid to slice just those pages. Otherwise the range above is used.
+              </p>
               <button type="button" onClick={handleSlice} disabled={!selectedDocument}>
                 Slice to new document
               </button>

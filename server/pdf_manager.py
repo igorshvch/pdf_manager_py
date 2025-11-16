@@ -6,9 +6,13 @@ from io import BytesIO
 import base64
 import uuid
 from pathlib import Path
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Sequence
 
-import pypdfium2 as pdfium
+try:  # pragma: no cover - exercised via runtime usage
+    import pypdfium2 as pdfium
+except ModuleNotFoundError:  # pragma: no cover - helps local tests without preview deps
+    pdfium = None
+
 from PyPDF2 import PdfReader, PdfWriter
 
 
@@ -94,6 +98,11 @@ class PdfService:
     def get_page_previews(self, doc_id: str) -> List[Dict[str, str | int]]:
         """Return base64 previews for each page in the document."""
 
+        if pdfium is None:
+            raise RuntimeError(
+                "pypdfium2 is not installed. Install the server requirements to enable previews."
+            )
+
         meta = self.get_document(doc_id)
         previews: List[Dict[str, str | int]] = []
         pdf = pdfium.PdfDocument(str(meta.path))
@@ -115,18 +124,48 @@ class PdfService:
         pdf.close()
         return previews
 
-    def slice_document(self, doc_id: str, start_page: int, end_page: int) -> DocumentMeta:
-        """Create a new PDF containing the requested page range (inclusive)."""
+    def slice_document(
+        self,
+        doc_id: str,
+        start_page: int | None = None,
+        end_page: int | None = None,
+        pages: Iterable[int] | None = None,
+    ) -> DocumentMeta:
+        """Create a new PDF using either a contiguous range or explicit page numbers."""
 
         meta = self.get_document(doc_id)
-        if start_page < 1 or end_page > meta.pages or start_page > end_page:
-            raise ValueError("Invalid page range for slicing")
-
         reader = PdfReader(meta.path)
         writer = PdfWriter()
-        for idx in range(start_page - 1, end_page):
-            writer.add_page(reader.pages[idx])
+
+        page_numbers: Sequence[int]
+        if pages:
+            page_numbers = self._normalize_page_list(pages, meta.pages)
+        else:
+            if start_page is None or end_page is None:
+                raise ValueError("start_page and end_page are required when no pages are provided")
+            if start_page < 1 or end_page > meta.pages or start_page > end_page:
+                raise ValueError("Invalid page range for slicing")
+            page_numbers = list(range(start_page, end_page + 1))
+
+        for page_number in page_numbers:
+            writer.add_page(reader.pages[page_number - 1])
         return self._store_writer(writer)
+
+    def _normalize_page_list(self, pages: Iterable[int], max_pages: int) -> List[int]:
+        """Validate a collection of page numbers and return a sorted, unique list."""
+
+        try:
+            normalized = sorted({int(page) for page in pages})
+        except (TypeError, ValueError) as exc:  # pragma: no cover - defensive programming
+            raise ValueError("Pages must be integers") from exc
+
+        if not normalized:
+            raise ValueError("No pages supplied for slicing")
+
+        for page in normalized:
+            if page < 1 or page > max_pages:
+                raise ValueError(f"Page {page} is out of bounds for document with {max_pages} pages")
+        return normalized
 
     def merge_documents(self, doc_ids: Iterable[str], output_name: str | None = None) -> DocumentMeta:
         """Merge the provided documents into a new PDF."""

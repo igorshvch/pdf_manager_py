@@ -35,7 +35,7 @@ Key endpoints:
 | `POST` | `/api/upload` | Upload and store a PDF document. |
 | `GET` | `/api/documents` | List stored documents. |
 | `GET` | `/api/document/<id>/pages` | Retrieve base64 previews for every page. |
-| `POST` | `/api/document/<id>/slice` | Create a new PDF containing a page range. |
+| `POST` | `/api/document/<id>/slice` | Create a new PDF from a page range or an explicit list of page numbers. |
 | `POST` | `/api/document/<id>/rotate` | Rotate selected pages by 90/180/270 degrees. |
 | `POST` | `/api/merge` | Merge multiple documents into one file. |
 | `GET` | `/api/document/<id>/download` | Download the full PDF. |
@@ -62,7 +62,7 @@ Features:
 - Document list with merge checkboxes and download links.
 - Full-page previews with selectable cards for rotation.
 - Click-to-select + drag-to-reorder grid for organizing page workflows.
-- Controls for slicing page ranges into new PDFs and rotating selected pages.
+- Controls for slicing selected pages (via the preview grid) or traditional page ranges, plus rotation tools.
 
 ## Tests
 

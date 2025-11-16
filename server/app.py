@@ -75,10 +75,18 @@ def slice_document(doc_id: str):
     """Create a new PDF containing only the specified page range."""
 
     payload: Dict[str, Any] = request.get_json(force=True)
+    raw_pages = payload.get("pages")
+    page_numbers = None
+    if isinstance(raw_pages, list) and raw_pages:
+        try:
+            page_numbers = [int(page) for page in raw_pages]
+        except (TypeError, ValueError):
+            return _json_error("Page selections must be integers")
+
     start_page = int(payload.get("startPage", 1))
     end_page = int(payload.get("endPage", start_page))
     try:
-        meta = service.slice_document(doc_id, start_page, end_page)
+        meta = service.slice_document(doc_id, start_page, end_page, page_numbers)
     except (KeyError, ValueError) as exc:
         return _json_error(str(exc))
     return {"document": meta.as_dict()}
