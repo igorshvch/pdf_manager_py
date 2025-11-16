@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-import fitz  # type: ignore
+import pypdfium2 as pdfium
 from PyPDF2 import PdfReader, PdfWriter
 
 
@@ -96,16 +96,23 @@ class PdfService:
 
         meta = self.get_document(doc_id)
         previews: List[Dict[str, str | int]] = []
-        with fitz.open(meta.path) as pdf:
-            for index, page in enumerate(pdf):
-                pix = page.get_pixmap(matrix=fitz.Matrix(0.6, 0.6))
-                buffer = BytesIO()
-                pix.save(buffer, format="PNG")
-                encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
-                previews.append({
-                    "index": index + 1,
-                    "preview": f"data:image/png;base64,{encoded}",
-                })
+        pdf = pdfium.PdfDocument(str(meta.path))
+        for index in range(len(pdf)):
+            page = pdf[index]
+            try:
+                bitmap = page.render(scale=0.8)
+                image = bitmap.to_pil()
+                bitmap.close()
+            finally:
+                page.close()
+            buffer = BytesIO()
+            image.save(buffer, format="PNG")
+            encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
+            previews.append({
+                "index": index + 1,
+                "preview": f"data:image/png;base64,{encoded}",
+            })
+        pdf.close()
         return previews
 
     def slice_document(self, doc_id: str, start_page: int, end_page: int) -> DocumentMeta:

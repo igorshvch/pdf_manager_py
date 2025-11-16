@@ -1,6 +1,6 @@
 # PDF Manager
 
-A client-server application for uploading, slicing, merging, rotating, and previewing PDF files. The backend is powered by Flask with PyPDF2/PyMuPDF for PDF manipulation, while the frontend is a React + Vite dashboard that offers drag-and-drop uploads and page visualization controls.
+A client-server application for uploading, slicing, merging, rotating, and previewing PDF files. The backend is powered by Flask with PyPDF2 for structural manipulation and pypdfium2 (PDFium) for preview rendering, while the frontend is a React + Vite dashboard that offers drag-and-drop uploads and page visualization controls.
 
 ## Repository layout
 
@@ -21,6 +21,7 @@ Each directory contains its own `AGENTS.md` with contributor-specific guidance.
    cd server
    pip install -r requirements.txt
    ```
+   *Why not PyMuPDF?* The preview renderer now uses `pypdfium2`, which ships ready-made wheels (including for Python 3.13 and Windows) so contributors do not need a local MuPDF build chain.
 3. Run the server:
    ```bash
    flask --app app run --debug
