@@ -13,7 +13,7 @@ try:  # pragma: no cover - exercised via runtime usage
 except ModuleNotFoundError:  # pragma: no cover - helps local tests without preview deps
     pdfium = None
 
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 
 
 @dataclass

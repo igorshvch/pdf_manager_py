@@ -1,7 +1,7 @@
 """Unit tests for PdfService slicing helpers."""
 from pathlib import Path
 
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 
 from server.pdf_manager import PdfService
 
