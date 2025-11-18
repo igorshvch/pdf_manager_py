@@ -7,7 +7,7 @@ const App = () => {
   const [selectedDocumentId, setSelectedDocumentId] = useState(null);
   const [pages, setPages] = useState([]);
   const [selectedPages, setSelectedPages] = useState(new Set());
-  const [sliceRangeInputs, setSliceRangeInputs] = useState({ start: '1', end: '1' });
+  const [pagePattern, setPagePattern] = useState('1');
   const [statusMessage, setStatusMessage] = useState('');
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [loadingPages, setLoadingPages] = useState(false);
@@ -50,13 +50,13 @@ const App = () => {
     setSelectedDocumentId(docId);
     setSelectedPages(new Set());
     setPages([]);
-    setSliceRangeInputs({ start: '1', end: '1' });
+    setPagePattern('1');
     setLoadingPages(true);
     try {
       const { pages: pagePreviews } = await fetchPages(docId);
       setPages(pagePreviews);
       const totalPages = pagePreviews.length || 1;
-      setSliceRangeInputs({ start: '1', end: String(totalPages) });
+      setPagePattern(`1-${totalPages}`);
     } catch (error) {
       setStatusMessage(error.message);
     } finally {
@@ -91,33 +91,82 @@ const App = () => {
     });
   };
 
+  const parsePagePattern = (pattern, maxPages) => {
+    const entries = pattern
+      .split(',')
+      .map((piece) => piece.trim())
+      .filter(Boolean);
+
+    if (!entries.length) {
+      return { pages: [], error: 'Введите хотя бы одну страницу или диапазон.' };
+    }
+
+    const collected = new Set();
+
+    for (const entry of entries) {
+      const normalized = entry.replace('–', '-');
+      if (normalized.includes('-')) {
+        const [rawStart, rawEnd] = normalized.split('-').map((part) => part.trim());
+        const startPage = Number.parseInt(rawStart, 10);
+        const endPage = Number.parseInt(rawEnd, 10);
+        if (Number.isNaN(startPage) || Number.isNaN(endPage)) {
+          return { pages: [], error: `Неверный диапазон "${entry}".` };
+        }
+        if (startPage < 1 || endPage < startPage) {
+          return { pages: [], error: `Диапазон "${entry}" вне допустимых границ.` };
+        }
+        if (endPage > maxPages) {
+          return { pages: [], error: `Документ содержит только ${maxPages} страниц(ы).` };
+        }
+        for (let page = startPage; page <= endPage; page += 1) {
+          collected.add(page);
+        }
+      } else {
+        const pageNumber = Number.parseInt(normalized, 10);
+        if (Number.isNaN(pageNumber)) {
+          return { pages: [], error: `Неверный номер страницы "${entry}".` };
+        }
+        if (pageNumber < 1 || pageNumber > maxPages) {
+          return { pages: [], error: `Страница ${pageNumber} вне диапазона документа.` };
+        }
+        collected.add(pageNumber);
+      }
+    }
+
+    if (!collected.size) {
+      return { pages: [], error: 'Введите корректные страницы для вырезания.' };
+    }
+
+    return { pages: Array.from(collected).sort((a, b) => a - b), error: null };
+  };
+
   const handleSlice = async () => {
     if (!selectedDocumentId) return;
-    const explicitPages = Array.from(selectedPages).sort((a, b) => a - b);
-    const startPage = Number.parseInt(sliceRangeInputs.start, 10);
-    const endPage = Number.parseInt(sliceRangeInputs.end, 10);
-    const rangeIsValid =
-      !Number.isNaN(startPage) &&
-      !Number.isNaN(endPage) &&
-      pages.length > 0 &&
-      startPage >= 1 &&
-      endPage >= startPage &&
-      endPage <= pages.length;
-    if (!explicitPages.length && !rangeIsValid) {
-      setStatusMessage('Enter a valid start and end page within the document range.');
+    if (!pages.length) {
+      setStatusMessage('Сначала загрузите документ для просмотра страниц.');
       return;
     }
+
+    const explicitPages = Array.from(selectedPages).sort((a, b) => a - b);
+    const parsed = parsePagePattern(pagePattern, pages.length);
+
+    if (parsed.error) {
+      setStatusMessage(parsed.error);
+      return;
+    }
+
+    const combinedPages = Array.from(new Set([...parsed.pages, ...explicitPages])).sort((a, b) => a - b);
+
+    if (!combinedPages.length) {
+      setStatusMessage('Введите номера страниц или выберите их кликом.');
+      return;
+    }
+
     try {
-      const fallbackStart = explicitPages[0] ?? 1;
-      const fallbackEnd = explicitPages[explicitPages.length - 1] ?? fallbackStart;
-      const payloadStart = rangeIsValid ? startPage : fallbackStart;
-      const payloadEnd = rangeIsValid ? endPage : fallbackEnd;
-      await sliceDocument(selectedDocumentId, payloadStart, payloadEnd, explicitPages);
-      setStatusMessage(
-        explicitPages.length
-          ? `Created a copy with ${explicitPages.length} page${explicitPages.length > 1 ? 's' : ''}.`
-          : `Created a copy for pages ${payloadStart}-${payloadEnd}.`,
-      );
+      const payloadStart = combinedPages[0];
+      const payloadEnd = combinedPages[combinedPages.length - 1];
+      await sliceDocument(selectedDocumentId, payloadStart, payloadEnd, combinedPages);
+      setStatusMessage(`Создана копия с ${combinedPages.length} страницами.`);
       setSelectedPages(new Set());
       loadDocuments();
     } catch (error) {
@@ -125,32 +174,15 @@ const App = () => {
     }
   };
 
-  const handleStartChange = (event) => {
-    setSliceRangeInputs((prev) => ({ ...prev, start: event.target.value }));
-  };
-
-  const handleEndChange = (event) => {
-    setSliceRangeInputs((prev) => ({ ...prev, end: event.target.value }));
+  const handlePatternChange = (event) => {
+    setPagePattern(event.target.value);
   };
 
   const selectFieldText = (event) => {
     event.target.select();
   };
 
-  const parsedStart = Number.parseInt(sliceRangeInputs.start, 10);
-  const parsedEnd = Number.parseInt(sliceRangeInputs.end, 10);
-  const rangeIsValid =
-    !Number.isNaN(parsedStart) &&
-    !Number.isNaN(parsedEnd) &&
-    pages.length > 0 &&
-    parsedStart >= 1 &&
-    parsedEnd >= parsedStart &&
-    parsedEnd <= pages.length;
-
-  const canSlice =
-    Boolean(selectedDocumentId) &&
-    (selectedPages.size > 0 ||
-      rangeIsValid);
+  const canSlice = Boolean(selectedDocumentId) && (selectedPages.size > 0 || pagePattern.trim().length > 0);
 
   return (
     <main>
@@ -186,30 +218,20 @@ const App = () => {
 
               <div className="range-inputs">
                 <label>
-                  Start page
+                  Pages (кома и диапазоны через тире)
                   <input
                     type="text"
                     inputMode="numeric"
-                    value={sliceRangeInputs.start}
-                    onChange={handleStartChange}
+                    value={pagePattern}
+                    onChange={handlePatternChange}
                     onDoubleClick={selectFieldText}
-                    disabled={!activeDocument}
-                  />
-                </label>
-                <label>
-                  End page
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={sliceRangeInputs.end}
-                    onChange={handleEndChange}
-                    onDoubleClick={selectFieldText}
+                    placeholder="1, 3-5, 10"
                     disabled={!activeDocument}
                   />
                 </label>
               </div>
 
-              <p className="hint">Click thumbnails below to pick specific pages. Leave unselected to use the range.</p>
+              <p className="hint">Можно вводить отдельные страницы и диапазоны. Клик по превью тоже добавляет страницы.</p>
 
               <button type="button" onClick={handleSlice} disabled={!canSlice}>
                 Slice pages to new document
