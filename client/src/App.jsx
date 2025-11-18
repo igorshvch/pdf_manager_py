@@ -7,7 +7,7 @@ const App = () => {
   const [selectedDocumentId, setSelectedDocumentId] = useState(null);
   const [pages, setPages] = useState([]);
   const [selectedPages, setSelectedPages] = useState(new Set());
-  const [sliceRange, setSliceRange] = useState({ start: 1, end: 1 });
+  const [sliceRangeInputs, setSliceRangeInputs] = useState({ start: '1', end: '1' });
   const [statusMessage, setStatusMessage] = useState('');
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [loadingPages, setLoadingPages] = useState(false);
@@ -50,13 +50,13 @@ const App = () => {
     setSelectedDocumentId(docId);
     setSelectedPages(new Set());
     setPages([]);
-    setSliceRange({ start: 1, end: 1 });
+    setSliceRangeInputs({ start: '1', end: '1' });
     setLoadingPages(true);
     try {
       const { pages: pagePreviews } = await fetchPages(docId);
       setPages(pagePreviews);
       const totalPages = pagePreviews.length || 1;
-      setSliceRange({ start: 1, end: totalPages });
+      setSliceRangeInputs({ start: '1', end: String(totalPages) });
     } catch (error) {
       setStatusMessage(error.message);
     } finally {
@@ -94,21 +94,29 @@ const App = () => {
   const handleSlice = async () => {
     if (!selectedDocumentId) return;
     const explicitPages = Array.from(selectedPages).sort((a, b) => a - b);
+    const startPage = Number.parseInt(sliceRangeInputs.start, 10);
+    const endPage = Number.parseInt(sliceRangeInputs.end, 10);
     const rangeIsValid =
+      !Number.isNaN(startPage) &&
+      !Number.isNaN(endPage) &&
       pages.length > 0 &&
-      sliceRange.start >= 1 &&
-      sliceRange.end >= sliceRange.start &&
-      sliceRange.end <= pages.length;
+      startPage >= 1 &&
+      endPage >= startPage &&
+      endPage <= pages.length;
     if (!explicitPages.length && !rangeIsValid) {
-      setStatusMessage('Select pages or enter a valid range.');
+      setStatusMessage('Enter a valid start and end page within the document range.');
       return;
     }
     try {
-      await sliceDocument(selectedDocumentId, sliceRange.start, sliceRange.end, explicitPages);
+      const fallbackStart = explicitPages[0] ?? 1;
+      const fallbackEnd = explicitPages[explicitPages.length - 1] ?? fallbackStart;
+      const payloadStart = rangeIsValid ? startPage : fallbackStart;
+      const payloadEnd = rangeIsValid ? endPage : fallbackEnd;
+      await sliceDocument(selectedDocumentId, payloadStart, payloadEnd, explicitPages);
       setStatusMessage(
         explicitPages.length
           ? `Created a copy with ${explicitPages.length} page${explicitPages.length > 1 ? 's' : ''}.`
-          : `Created a copy for pages ${sliceRange.start}-${sliceRange.end}.`,
+          : `Created a copy for pages ${payloadStart}-${payloadEnd}.`,
       );
       setSelectedPages(new Set());
       loadDocuments();
@@ -117,35 +125,32 @@ const App = () => {
     }
   };
 
-  const clampRangeValue = (value) => {
-    if (!pages.length) return 1;
-    const maxPage = pages.length;
-    return Math.min(Math.max(value, 1), maxPage);
-  };
-
   const handleStartChange = (event) => {
-    const value = Number(event.target.value);
-    if (Number.isNaN(value)) return;
-    setSliceRange((prev) => {
-      const safeStart = clampRangeValue(value);
-      const safeEnd = Math.max(safeStart, clampRangeValue(prev.end));
-      return { start: safeStart, end: safeEnd };
-    });
+    setSliceRangeInputs((prev) => ({ ...prev, start: event.target.value }));
   };
 
   const handleEndChange = (event) => {
-    const value = Number(event.target.value);
-    if (Number.isNaN(value)) return;
-    setSliceRange((prev) => {
-      const safeEnd = clampRangeValue(value);
-      return { start: Math.min(prev.start, safeEnd), end: Math.max(prev.start, safeEnd) };
-    });
+    setSliceRangeInputs((prev) => ({ ...prev, end: event.target.value }));
   };
+
+  const selectFieldText = (event) => {
+    event.target.select();
+  };
+
+  const parsedStart = Number.parseInt(sliceRangeInputs.start, 10);
+  const parsedEnd = Number.parseInt(sliceRangeInputs.end, 10);
+  const rangeIsValid =
+    !Number.isNaN(parsedStart) &&
+    !Number.isNaN(parsedEnd) &&
+    pages.length > 0 &&
+    parsedStart >= 1 &&
+    parsedEnd >= parsedStart &&
+    parsedEnd <= pages.length;
 
   const canSlice =
     Boolean(selectedDocumentId) &&
     (selectedPages.size > 0 ||
-      (pages.length > 0 && sliceRange.start >= 1 && sliceRange.end <= pages.length && sliceRange.start <= sliceRange.end));
+      rangeIsValid);
 
   return (
     <main>
@@ -183,22 +188,22 @@ const App = () => {
                 <label>
                   Start page
                   <input
-                    type="number"
-                    min="1"
-                    max={pages.length || 1}
-                    value={sliceRange.start}
+                    type="text"
+                    inputMode="numeric"
+                    value={sliceRangeInputs.start}
                     onChange={handleStartChange}
+                    onDoubleClick={selectFieldText}
                     disabled={!activeDocument}
                   />
                 </label>
                 <label>
                   End page
                   <input
-                    type="number"
-                    min={sliceRange.start}
-                    max={pages.length || 1}
-                    value={sliceRange.end}
+                    type="text"
+                    inputMode="numeric"
+                    value={sliceRangeInputs.end}
                     onChange={handleEndChange}
+                    onDoubleClick={selectFieldText}
                     disabled={!activeDocument}
                   />
                 </label>
