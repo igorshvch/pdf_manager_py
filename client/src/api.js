@@ -23,8 +23,9 @@ export async function uploadDocument(file) {
   return handleResponse(response);
 }
 
-export async function fetchPages(docId) {
-  const response = await fetch(`${API_BASE}/api/document/${docId}/pages`);
+export async function fetchPages(docId, offset = 0, limit = 10) {
+  const params = new URLSearchParams({ offset, limit });
+  const response = await fetch(`${API_BASE}/api/document/${docId}/pages?${params.toString()}`);
   return handleResponse(response);
 }
 

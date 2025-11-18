@@ -61,13 +61,26 @@ def download_document(doc_id: str):
 
 @app.get("/api/document/<doc_id>/pages")
 def page_previews(doc_id: str):
-    """Return previews for each page of the document."""
+    """Return previews for each page of the document.
+
+    Supports incremental loading by accepting ``offset`` and ``limit`` query
+    parameters to restrict the preview window.
+    """
 
     try:
-        previews = service.get_page_previews(doc_id)
+        offset = int(request.args.get("offset", 0))
+        limit_raw = request.args.get("limit")
+        limit = None if limit_raw is None else int(limit_raw)
+    except ValueError:
+        return _json_error("offset and limit must be integers")
+
+    try:
+        previews = service.get_page_previews(doc_id, offset=offset, limit=limit)
     except KeyError as exc:
         return _json_error(str(exc), status=404)
-    return {"pages": previews}
+    except ValueError as exc:
+        return _json_error(str(exc))
+    return previews
 
 
 @app.post("/api/document/<doc_id>/slice")
