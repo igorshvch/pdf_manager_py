@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchDocuments, uploadDocument, fetchPages, sliceDocument, deleteDocument } from './api.js';
 import { DocumentList, DropZone, PagePreviewGrid } from './components/index.js';
 
+const PAGE_BATCH_SIZE = 8;
+
 const App = () => {
   const [documents, setDocuments] = useState([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState(null);
@@ -11,6 +13,9 @@ const App = () => {
   const [statusMessage, setStatusMessage] = useState('');
   const [loadingDocuments, setLoadingDocuments] = useState(false);
   const [loadingPages, setLoadingPages] = useState(false);
+  const [pageOffset, setPageOffset] = useState(0);
+  const [hasMorePages, setHasMorePages] = useState(false);
+  const [totalPageCount, setTotalPageCount] = useState(0);
 
   const activeDocument = useMemo(
     () => documents.find((doc) => doc.doc_id === selectedDocumentId) || null,
@@ -47,16 +52,28 @@ const App = () => {
 
   const handleSelectDocument = async (docId) => {
     if (docId === selectedDocumentId) return;
+
+    const targetDoc = documents.find((doc) => doc.doc_id === docId);
     setSelectedDocumentId(docId);
     setSelectedPages(new Set());
     setPages([]);
-    setPagePattern('1');
+    setPageOffset(0);
+    setHasMorePages(false);
+    setTotalPageCount(targetDoc?.pages || 0);
+    setPagePattern(targetDoc?.pages ? `1-${targetDoc.pages}` : '1');
     setLoadingPages(true);
     try {
-      const { pages: pagePreviews } = await fetchPages(docId);
+      const { pages: pagePreviews, total_pages: totalPages } = await fetchPages(
+        docId,
+        0,
+        PAGE_BATCH_SIZE,
+      );
       setPages(pagePreviews);
-      const totalPages = pagePreviews.length || 1;
-      setPagePattern(`1-${totalPages}`);
+      const resolvedTotal = Math.max(totalPages || targetDoc?.pages || pagePreviews.length || 1, 1);
+      setTotalPageCount(resolvedTotal);
+      setPageOffset(pagePreviews.length);
+      setHasMorePages(pagePreviews.length < resolvedTotal);
+      setPagePattern(`1-${resolvedTotal}`);
     } catch (error) {
       setStatusMessage(error.message);
     } finally {
@@ -72,6 +89,9 @@ const App = () => {
         setSelectedDocumentId(null);
         setPages([]);
         setSelectedPages(new Set());
+        setTotalPageCount(0);
+        setPageOffset(0);
+        setHasMorePages(false);
       }
       loadDocuments();
     } catch (error) {
@@ -90,6 +110,39 @@ const App = () => {
       return next;
     });
   };
+
+  const loadMorePages = useCallback(async () => {
+    if (!selectedDocumentId || loadingPages || !hasMorePages) return;
+
+    setLoadingPages(true);
+    try {
+      const { pages: nextBatch, total_pages: totalPages } = await fetchPages(
+        selectedDocumentId,
+        pageOffset,
+        PAGE_BATCH_SIZE,
+      );
+      const resolvedTotal = totalPages || totalPageCount || activeDocument?.pages || 0;
+      setTotalPageCount(resolvedTotal || totalPageCount);
+      setPages((prev) => [...prev, ...nextBatch]);
+      setPageOffset((prev) => {
+        const updatedOffset = prev + nextBatch.length;
+        if (!nextBatch.length || (resolvedTotal && updatedOffset >= resolvedTotal)) {
+          setHasMorePages(false);
+        }
+        return updatedOffset;
+      });
+      if (!resolvedTotal && !nextBatch.length) {
+        setHasMorePages(false);
+      }
+      if (nextBatch.length < PAGE_BATCH_SIZE) {
+        setHasMorePages(false);
+      }
+    } catch (error) {
+      setStatusMessage(error.message);
+    } finally {
+      setLoadingPages(false);
+    }
+  }, [selectedDocumentId, loadingPages, hasMorePages, pageOffset, totalPageCount, activeDocument]);
 
   const parsePagePattern = (pattern, maxPages) => {
     const entries = pattern
@@ -142,13 +195,13 @@ const App = () => {
 
   const handleSlice = async () => {
     if (!selectedDocumentId) return;
-    if (!pages.length) {
+    if (!totalPageCount) {
       setStatusMessage('Сначала загрузите документ для просмотра страниц.');
       return;
     }
 
     const explicitPages = Array.from(selectedPages).sort((a, b) => a - b);
-    const parsed = parsePagePattern(pagePattern, pages.length);
+    const parsed = parsePagePattern(pagePattern, totalPageCount || pages.length || 0);
 
     if (parsed.error) {
       setStatusMessage(parsed.error);
@@ -246,6 +299,8 @@ const App = () => {
               selectedPages={selectedPages}
               onToggleSelect={togglePageSelection}
               isLoading={loadingPages}
+              hasMore={hasMorePages}
+              onLoadMore={loadMorePages}
             />
           </section>
         </div>

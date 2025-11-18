@@ -103,18 +103,40 @@ class PdfService:
             meta.path.unlink()
         del self._documents[doc_id]
 
-    def get_page_previews(self, doc_id: str) -> List[Dict[str, str | int]]:
-        """Return base64 previews for each page in the document."""
+    def get_page_previews(
+        self, doc_id: str, *, offset: int = 0, limit: int | None = None
+    ) -> Dict[str, List[Dict[str, str | int]] | int]:
+        """Return base64 previews for a window of pages in the document.
+
+        Args:
+            doc_id: Identifier of the stored document.
+            offset: Zero-based starting index for the preview window.
+            limit: Maximum number of previews to return. If ``None``, all remaining
+                pages after ``offset`` are included.
+
+        Returns:
+            Mapping with a ``pages`` list containing preview payloads and a
+            ``total_pages`` integer describing the overall document length.
+        """
 
         if pdfium is None:
             raise RuntimeError(
                 "pypdfium2 is not installed. Install the server requirements to enable previews."
             )
 
+        if offset < 0:
+            raise ValueError("Offset for previews cannot be negative")
+        if limit is not None and limit < 1:
+            raise ValueError("Limit for previews must be at least 1")
+
         meta = self.get_document(doc_id)
-        previews: List[Dict[str, str | int]] = []
         pdf = pdfium.PdfDocument(str(meta.path))
-        for index in range(len(pdf)):
+        total_pages = len(pdf)
+        start_index = min(offset, total_pages)
+        end_index = total_pages if limit is None else min(total_pages, start_index + limit)
+
+        previews: List[Dict[str, str | int]] = []
+        for index in range(start_index, end_index):
             page = pdf[index]
             try:
                 bitmap = page.render(scale=0.8)
@@ -125,12 +147,14 @@ class PdfService:
             buffer = BytesIO()
             image.save(buffer, format="PNG")
             encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
-            previews.append({
-                "index": index + 1,
-                "preview": f"data:image/png;base64,{encoded}",
-            })
+            previews.append(
+                {
+                    "index": index + 1,
+                    "preview": f"data:image/png;base64,{encoded}",
+                }
+            )
         pdf.close()
-        return previews
+        return {"pages": previews, "total_pages": total_pages}
 
     def slice_document(
         self,
